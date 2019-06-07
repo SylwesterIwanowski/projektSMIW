@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="shortcut icon" type="image/x-icon" href="https://www.mydevil.net/favicon.ico" />
+    <meta charset="UTF-8" />
+    <meta name="description" content="sylwester.lukaszjamroz.usermd.net" />
+    <title>sylwester</title>
+  
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="moment.min.js"></script>
+  
+    <style>
+      table, th, td
+      {
+        border: 1px solid black;
+        border-collapse: collapse;
+      }
+      #data td
+      {
+        text-align: center;
+      }
+      #data th
+      {
+        font-weight: bold; 
+      }
+      th, td {
+        padding: 3px 10px;
+      }
+      
+    </style>  
+</head>
+<body>
+  <div id="main">
+    <div>
+      <table style="margin-bottom: 15px;">
+        <tbody>
+          <tr>
+            <td>Aktualny czas:</td>
+            <td id="time"></td> 
+            <td>Opóźnienie (s):</td>
+            <td id="latency"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div id="content">
+        <table id="data">
+          <tbody id="dataContent">
+          </tbody>
+        </table>
+      </div>
+  </div>
+  
+  <script>  
+    function reader(data, status){
+      var content = "<tr id=\"title\">\n<th>Od</th>\n<th>Do</th>\n<th>Mignięć</th>\n<th>Zbadano (s)</th>\n</tr>\n";
+      lines = data.split("\n");
+      
+      var firstDate = moment();
+      var currentdate = moment(); 
+      var referenceDate = moment();
+      
+      var totalDiff = 0;
+      var usage = 0;
+      var usage10min = 0;
+      var totalDiff10min = 0;
+      var usageNow = 0;
+      var totalDiffNow = 0;
+      
+      var usageAll  = 0;
+      var totalDiffAll = 0;
+      var totalSpan = 0;
+      for (var i = 0, len = lines.length; i < len; i++) { 
+        var half = lines[i].split("*");
+        var two = half[1].split("$");
+        
+        var diffe = moment(two[0],"HH:mm:ss DD-MM-YYYY").diff(moment(half[0],"HH:mm:ss DD-MM-YYYY"),'seconds');
+        
+        if(i == 0){ //ostatni wpis
+          firstDate  = moment(two[0],"HH:mm:ss DD-MM-YYYY");
+          //referenceDate = firstDate;
+          usageNow = parseFloat(two[1]);
+          totalDiffNow = diffe;
+        }else 
+        if(i == (len-1)){
+          totalSpan = referenceDate.diff(moment(two[0],"HH:mm:ss DD-MM-YYYY"),'minutes')/10; //łacznie
+        }
+        
+        usageAll += parseFloat(two[1]); //wszystko
+        totalDiffAll += diffe;
+          
+        if(referenceDate.diff(moment(two[0],"HH:mm:ss DD-MM-YYYY"),'seconds') < 3600){ //godzina
+          usage  += parseFloat(two[1]);
+          totalDiff  += diffe;
+          
+          if(referenceDate.diff(moment(two[0],"HH:mm:ss DD-MM-YYYY"),'seconds') < 600){ //10 min
+            usage10min += parseFloat(two[1]);
+            totalDiff10min += diffe;
+           }
+        }
+        
+        if(i < 25){
+        content += "<tr>" +
+          "<td>" + half[0] + "</td>" +
+          "<td>" + two[0] + "</td>" +
+          "<td>" + two[1] + "</td>" +
+          "<td>" + diffe + "</td>" +
+          "</tr>\n";
+        }
+      }
+      $("#dataContent").html(content);
+      
+      var show = currentdate.diff(firstDate,'seconds');
+    
+      console.log("Total time: " + totalSpan);
+      console.log("Total usage: " + usageAll);
+      console.log("Total stamps: " + totalDiffAll);
+      $("#title").before( ( show > 9 ? "<tr><td colspan=\"2\">Ostatni wpis:</td><td> " : "<tr><td colspan=\"2\">Aktualnie:</td><td> " )
+                         + (usageNow> 0 ? (3600/totalDiffNow*usageNow/(totalDiffNow/10)).toFixed(2) : 0)
+                         + " W" /*+ " ~ " + (2.778/usageNow).toFixed(3) + " kWh"*/ 
+                         + ( show > 100 ? (" z " + firstDate.format("HH:mm:ss DD-MM-YYYY")) : "" ) + "</td><td>Wypełnienie: " 
+                         + ( show < 10 ? (totalDiffNow*10).toFixed(2) : "0.00" ) + "%</td></tr>"
+                         
+                         +"<tr><td colspan=\"2\">Ostatnie 10 minut:</td><td> " 
+                         + (usage10min > 0 ? (3600*usage10min/totalDiff10min).toFixed(2) : 0) 
+                         + " W" /*+ " ~ " + (166.667/usage10min).toFixed(3) + " kWh"*/ + "</td><td>Wypełnienie: " 
+                         + (totalDiff10min/6).toFixed(2) + "%</td></tr>"
+                         
+                         +"<tr><td colspan=\"2\">Ostatnia godzina:</td><td> " 
+                         + (usage> 0 ? (usage/1000/(totalDiff/3600)).toFixed(2) : 0) 
+                         + " kWh" /*+ " ~ " + (1000/usage).toFixed(3) + " kWh"*/ + "</td><td>Wypełnienie: " 
+                         + (totalDiff/36).toFixed(2) + "%</td></tr>" 
+                         
+                         +"<tr><td colspan=\"2\">Łączne zużycie:</td><td> " + (usageAll/1000).toFixed(3) 
+                         + " kWh" + "</td><td>Wypełnienie: " 
+                         + (totalDiffAll/(6*totalSpan)).toFixed(2) + "%</td></tr>" 
+                         
+                         + "<tr><td colspan=\"4\">Ostatnie 25 wpisów</td></tr>"
+        );
+      
+      $("#latency").html(show);
+      $("#time").html(currentdate.format("HH:mm:ss DD-MM-YYYY"));
+    }
+    
+    function refresher(){
+      $.get("read.php", reader);
+      
+      window.setTimeout(refresher, 1000);
+    }
+    
+    window.setTimeout(refresher, 1000);
+  </script>
+  
+</body>
+</html>
